@@ -1,0 +1,71 @@
+#!/usr/bin/env sh
+
+
+# Exit if a `git` command doesn't exist in the user's PATH or
+# if we're not in a git repository. This is useful to keep
+# in case the script is ran directly, instead of through the git CLI.
+if  ! command -v git &> /dev/null ||
+    ! command git rev-parse --git-dir &> /dev/null;
+    then exit; fi
+
+
+# Get the branch name. Defaults to master
+# This needs to be checked against detached heads
+branchName=$(git rev-parse --abbrev-ref --verify --quiet HEAD 2>&1 || echo "master")
+
+# Get the username, exit if it's not set
+user=$(git config --get user.email)
+if [[ $user == "" ]]; then
+    echo "You need to tell git who you are via `git config --global user.email you@domain.com`" && exit
+fi
+
+# Get the shelf branch name
+shelfBranch="shelf/$user/$branchName"
+
+# fetch origin if the shelf's ref doesn't exist locally
+# this enables us to merge changes in, in the event that the same
+# user is unstashing the branch on a different machine, where the stash
+# commit doesn't exist
+if ! command git branch --all | grep "remotes/origin/$shelfBranch" &> /dev/null; then
+    git fetch origin
+fi
+
+if command git branch --all | grep "remotes/origin/$shelfBranch" &> /dev/null; then
+    # stash local changes if any exist
+    if ! command git diff-index --exit-code HEAD &> /dev/null; then
+        echo
+        echo "Stashing local changes..."
+        echo
+        git -c commit.gpgsign=false stash --include-untracked
+    fi
+
+    if [[ ! $(git diff HEAD..origin/$shelfBranch) == "" ]]; then
+        git pull origin $shelfBranch
+    fi
+
+    # delete the shelf branch on the remote
+    git push --delete origin $shelfBranch
+
+    # reset the shelf commit
+    if ! command git reset --soft HEAD~1; then
+        # if we can't reset the shelf commit the easy way,
+        # that means it's the first commit in the repository.
+        # we need to delete the ref and reset instead.
+        git update-ref -d HEAD
+    fi
+    git reset
+
+    # remove the shelf configuration key
+    git config --unset branch.$branchName.shelf
+
+    # remove the branch's section if there aren't any remaining keys
+    if [[ $(git config --get-regexp branch.$branchName) == "" ]]; then
+        git config --remove-section branch.$branchName
+    fi
+else
+    echo "It doesn't look like this branch is shelved."
+    echo "If you think you are seeing this message in error, please"
+    echo "file a bug report at:"
+    echo
+    echo "https://github.com/bddenhartog/git-extensions/issues"
+fi;
