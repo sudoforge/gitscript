@@ -53,14 +53,6 @@ usage() {
 }
 
 
-# Exit if a `git` command doesn't exist in the user's PATH or
-# if we're not in a git repository. This is useful to keep
-# in case the script is ran directly, instead of through the git CLI.
-if  ! command -v git &> /dev/null ||
-    ! command git rev-parse --git-dir &> /dev/null;
-    then exit 1; fi
-
-
 # Display usage and exit if there aren't any arguments
 # or if one of the support 'help'commands/flags is passed
 # as the first argument.
@@ -71,6 +63,14 @@ if  [ $# -lt 1 ] || \
     usage
     exit 1
 fi
+
+
+# Exit if a `git` command doesn't exist in the user's PATH or
+# if we're not in a git repository. This is useful to keep
+# in case the script is ran directly, instead of through the git CLI.
+if  ! command -v git &> /dev/null ||
+    ! command git rev-parse --git-dir &> /dev/null;
+    then exit 1; fi
 
 
 # Get the branch name or short revision hash.
