@@ -126,8 +126,9 @@ fi
 
 # Exit the script if there were errors parsing the arguments
 if [ $parse_error -eq 1 ]; then
-    echo "\nIt looks like there were some errors."
-    echo "Try `git rename --help` to see the help."
+    echo
+    echo "It looks like there were some errors."
+    echo "Try \`git rename help\` to see the help."
     exit
 fi
 
