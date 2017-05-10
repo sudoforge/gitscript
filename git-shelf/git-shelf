@@ -24,7 +24,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-#
+
 
 # Exit if a `git` command doesn't exist in the user's PATH or
 # if we're not in a git repository. This is useful to keep
@@ -34,18 +34,20 @@ if  ! command -v git &> /dev/null ||
     then exit; fi
 
 
-# Get the branch name. Defaults to master
-# This needs to be checked against detached heads
-branchName=$(git rev-parse --abbrev-ref --verify --quiet HEAD 2>&1 || echo "master")
+# Get the name or hash of the ref currently checked out
+ref=$(git symbolic-ref -q --short HEAD || \
+      git rev-parse --short HEAD 2>&1)
 
 
-# Commit locally and store the sha-1
+# If the ref is already shelved, we want to amend
+# the commit and force push to the shelf branch.
 amend=""
 force=""
-if command git config --get branch.$branchName.shelf &> /dev/null; then
+if command git config --get branch.$ref.shelf &> /dev/null; then
     amend="--amend"
     force="--force"
 fi
+
 
 # Proceed only if we can successfully create a commit.
 # Failing this means the user doesn't have anything to shelf,
@@ -53,11 +55,11 @@ fi
 git add -A
 if command git -c commit.gpgsign=false commit $amend -m "SHELF"; then
     # Update the shelf status for the branch
-    git config branch.$branchName.shelf true
+    git config branch.$ref.shelf true
 
     # Create the shelf branch on the remote
     # and update the shelf configuration key if successful
     user=$(git config --get user.email)
-    git push origin $force $branchName:shelf/$user/$branchName && \
-    git config --local branch.$branchName.shelf true
+    git push origin $force $ref:shelf/$user/$ref && \
+    git config --local branch.$ref.shelf true
 fi
