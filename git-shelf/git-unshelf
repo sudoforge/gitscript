@@ -29,8 +29,8 @@
 # Exit if a `git` command doesn't exist in the user's PATH or
 # if we're not in a git repository. This is useful to keep
 # in case the script is ran directly, instead of through the git CLI.
-if  ! command -v git &> /dev/null ||
-    ! command git rev-parse --git-dir &> /dev/null;
+if  ! command -v git > /dev/null 2>&1 ||
+    ! command git rev-parse --git-dir > /dev/null 2>&1;
     then exit; fi
 
 
@@ -38,11 +38,9 @@ if  ! command -v git &> /dev/null ||
 # This needs to be checked against detached heads
 branchName=$(git rev-parse --abbrev-ref --verify --quiet HEAD 2>&1 || echo "master")
 
-# Get the username, exit if it's not set
+# Get the user email, exit if empty
 user=$(git config --get user.email)
-if [[ $user == "" ]]; then
-    echo "You need to tell git who you are via `git config --global user.email you@domain.com`" && exit
-fi
+[ -z "$user" ] && log fatal "Unable to determine valid 'user.email' from git configuration."
 
 # Get the shelf branch name
 shelfBranch="shelf/$user/$branchName"
@@ -51,25 +49,26 @@ shelfBranch="shelf/$user/$branchName"
 # this enables us to merge changes in, in the event that the same
 # user is unstashing the branch on a different machine, where the stash
 # commit doesn't exist
-if ! command git branch --all | grep "remotes/origin/$shelfBranch" &> /dev/null; then
+if ! command git branch --all | grep "remotes/origin/$shelfBranch" > /dev/null 2>&1; then
     git fetch origin
 fi
 
-if command git branch --all | grep "remotes/origin/$shelfBranch" &> /dev/null; then
+if command git branch --all | grep "remotes/origin/$shelfBranch" > /dev/null 2>&1; then
     # stash local changes if any exist
-    if ! command git diff-index --exit-code HEAD &> /dev/null; then
+    if ! command git diff-index --exit-code HEAD > /dev/null 2>&1; then
         echo
         echo "Stashing local changes..."
         echo
         git -c commit.gpgsign=false stash --include-untracked
     fi
 
-    if [[ ! $(git diff HEAD..origin/$shelfBranch) == "" ]]; then
-        git pull origin $shelfBranch
+    diffContent=$(git diff ..origin/"$shelfBranch")
+    if [ ! "$diffContent" = "" ]; then
+        git pull origin "$shelfBranch"
     fi
 
     # delete the shelf branch on the remote
-    git push --delete origin $shelfBranch
+    git push --delete origin "$shelfBranch"
 
     # reset the shelf commit
     if ! command git reset --soft HEAD~1; then
@@ -81,11 +80,12 @@ if command git branch --all | grep "remotes/origin/$shelfBranch" &> /dev/null; t
     git reset
 
     # remove the shelf configuration key
-    git config --unset branch.$branchName.shelf
+    git config --unset branch."$branchName".shelf
 
     # remove the branch's section if there aren't any remaining keys
-    if [[ $(git config --get-regexp branch.$branchName) == "" ]]; then
-        git config --remove-section branch.$branchName
+    sectionContent=$(git config --get-regexp branch."$branchName")
+    if [ ! "$sectionContent" = "" ]; then
+        git config --remove-section branch."$branchName"
     fi
 else
     echo "It doesn't look like this branch is shelved."
