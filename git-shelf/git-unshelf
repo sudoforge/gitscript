@@ -83,8 +83,8 @@ if command git branch --all | grep "remotes/origin/$shelfBranch" > /dev/null 2>&
     git config --unset branch."$branchName".shelf
 
     # remove the branch's section if there aren't any remaining keys
-    sectionContent=$(git config --get-regexp branch."$branchName")
-    if [ ! "$sectionContent" = "" ]; then
+    sectionContent=$(git config --get-regexp branch."$branchName".*)
+    if [ "$sectionContent" = "" ]; then
         git config --remove-section branch."$branchName"
     fi
 else
