@@ -166,9 +166,6 @@ fi
 # and should instead simply run `git push`.
 git add -A
 if command git -c commit.gpgsign=false commit $amend -m "SHELF"; then
-    # Update the shelf status for the branch
-    git config branch."$ref".shelf true
-
     # Create the shelf branch on the remote
     # and update the shelf configuration key if successful
     git push "$REMOTE_NAME" $force "$ref":"$shelf" && \
