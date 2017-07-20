@@ -1,0 +1,304 @@
+#!/usr/bin/env sh
+#
+# git-worklog -- An easier way to look up who did what, and when.
+#
+# To report bugs, request features, or contribute:
+# https://github.com/git-scripts/library
+#
+# Copyright 2017 @bddenhartog
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is furnished
+# to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+usage() {
+    bold=$(tput bold)
+    italic=$(tput sitm)
+    reset=$(tput sgr0)
+
+    echo
+    echo "${bold}USAGE${reset}"
+    echo "    git worklog [help] [OPTIONS] START_DATE [END_DATE]"
+    echo
+    echo "${bold}ARGUMENTS${reset}"
+    echo "    help"
+    echo "        Displays this message. This must be the first argument passed"
+    echo "        to git-worklog, e.g. 'git worklog help'"
+    echo
+    echo "    START_DATE"
+    echo "        A date or string representative of a date."
+    echo
+    echo "    END_DATE"
+    echo "        ${italic}optional${reset}"
+    echo "        A date or string representative of a date."
+    echo
+    echo "        If this argument ${italic}is${reset} provided, commits made"
+    echo "        from the beginning of START_DATE until the end of END_DATE"
+    echo "        will be retrieved."
+    echo
+    echo "        If this argument is not provided, only commits made on the given"
+    echo "        START_DATE will be retrieved."
+    echo
+    echo "${bold}OPTIONS${reset}"
+    echo "    -d, --debug"
+    echo "        Print debugging information"
+    echo
+    echo "    -a AUTHOR, --author AUTHOR"
+    echo "        Instead of auto-detecting the git author, use AUTHOR"
+    echo
+    echo "    -s, --subjects-only"
+    echo "        Only show the commit message's first line"
+}
+
+
+log() {
+    prefix="git-worklog"
+    type="$1"
+    shift
+
+    case "$type" in
+        info)
+            echo "${prefix}: info: $*"
+            ;;
+        warn)
+            echo "${prefix}: warning: $*"
+            ;;
+        error)
+            ERROR_COUNT=$(($ERROR_COUNT+1))
+            echo "${prefix}: ERROR: $*"
+            ;;
+        fatal)
+            ERROR_COUNT=$(($ERROR_COUNT+1))
+            echo "${prefix}: FATAL: $*" 
+            abort
+            ;;
+        debug)  [ "$DEBUG_MODE" -eq 1 ] && echo "${prefix}: debug: $*" ;;
+    esac
+}
+
+
+checkPlural() {
+    if [ "$2" -gt 1 ] || [ "$2" -eq 0 ]; then
+        echo "${1}s"
+    else
+        echo "$1"
+    fi
+}
+
+
+abort() {
+    errorString=$(checkPlural "error" "$ERROR_COUNT")
+    errorString="$ERROR_COUNT $errorString"
+    echo
+    echo "Encountered $errorString."
+    echo
+    if [ ! "$DEBUG_MODE" -eq 1 ]; then
+        echo "Try re-running the same command with the '--debug' option for "
+        echo "more information."
+        echo
+    fi
+    echo "If you think you may have found a bug, please open an issue:"
+    echo "https://github.com/bddenhartog/git-scripts/issues"
+    exit 1
+}
+
+
+check_errors() {
+    if [ $ERROR_COUNT -gt 0 ]; then
+        abort
+    fi
+}
+
+
+# Display usage and exit if one of the help
+# commands/flags is passed as the first argument.
+case "$1" in
+    -h|--help|help)
+        usage
+        exit 1
+        ;;
+esac
+
+
+# Exit if a `git` command doesn't exist in the user's PATH or
+# if we're not in a git repository. This is useful to keep
+# in case the script is ran directly, instead of through the git CLI.
+if  ! command -v git > /dev/null 2>&1; then
+    log fatal "command 'git' not found"
+elif ! command git rev-parse --git-dir > /dev/null 2>&1; then
+    log fatal "not a git repository (or any of the parent directories): .git"
+fi
+
+
+# Initialize variables
+ERROR_COUNT=0
+DEBUG_MODE=0
+ARGUMENTS=""
+GIT_LOG_AUTHOR=""
+GIT_LOG_ONELINE=""
+
+
+# Parse flags and arguments
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -d|--debug)
+            DEBUG_MODE=1
+            log debug "turning debug mode ON"
+            ;;
+        -a|--author)
+            shift
+            GIT_LOG_AUTHOR="$1"
+            log debug "GIT_LOG_AUTHOR set to '$1'"
+            ;;
+        -s|--subjects-only)
+            GIT_LOG_ONELINE="--oneline"
+            log debug "GIT_LOG_ONELINE set to '--oneline'"
+            ;;
+        -*)
+            log error "Unknown option '$1'"
+            ;;
+        *) 
+            if [ -n "$ARGUMENTS" ]; then
+                ARGUMENTS="${ARGUMENTS} ${1}"
+            else
+                ARGUMENTS="${1}"
+            fi
+            log debug "argument added: '$1'"
+            ;;
+    esac
+    shift
+done
+
+
+log debug "ERROR_COUNT: $ERROR_COUNT"
+log debug "DEBUG_MODE: $DEBUG_MODE"
+log debug "ARGUMENTS: $ARGUMENTS"
+
+
+# Set the arguments up as start and end date
+# Also, check that no more than 2 arguments exist
+ARGS_COUNT=0
+START_DATE=""
+END_DATE=""
+for date in $ARGUMENTS; do
+    ARGS_COUNT=$(($ARGS_COUNT+1))
+    if [ "$ARGS_COUNT" -gt 2 ]; then
+        log error "cannot exceed maximum of two arguments"
+    fi
+
+    if [ -z "$START_DATE" ]; then
+        START_DATE="$date"
+        log debug "START_DATE set to '$date'"
+        continue
+    fi
+
+    if [ -z "$END_DATE" ]; then
+        END_DATE="$date"
+        log debug "END_DATE set to '$date'"
+        continue
+    fi
+done
+
+
+# Exit the script if there were errors parsing the options
+check_errors
+
+
+# Check for errors with the arguments
+log debug "validating date arguments via $(command -v date)"
+if [ -z "$START_DATE" ]; then
+    START_DATE="today 00:00:00"
+    log debug "no value provided for START_DATE, assuming 'today 00:00:00'"
+    log debug "START_DATE set to 'today 00:00'"
+else
+    log debug "START_DATE set to '$START_DATE'"
+fi
+
+if [ -z "$END_DATE" ]; then
+    END_DATE="today 23:59:59"
+    log debug "no value provided for END_DATE, assuming 'today 23:59:59'"
+    log debug "END_DATE set to 'today 23:59:59'"
+fi
+
+
+# Get the author's information if empty
+if [ -z "$GIT_LOG_AUTHOR" ]; then
+    if ! GIT_LOG_AUTHOR=$(git config --get user.email); then
+        whoami_location=$(command -v whoami)
+        log debug "user.email lookup failed, falling back to $whoami_location"
+        if ! GIT_LOG_AUTHOR=$(whoami); then
+            log debug "fallback using $whoami_location failed"
+            log error "unable to determine value for GIT_AUTHOR"
+        else
+            log debug "GIT_LOG_AUTHOR set to '$GIT_LOG_AUTHOR'"
+            log debug "GIT_LOG_AUTHOR set via $whoami_location"
+        fi
+    else
+        log debug "GIT_LOG_AUTHOR set to '$GIT_LOG_AUTHOR'"
+        log debug "GIT_LOG_AUTHOR set via user.email lookup"
+    fi
+
+    # Exit the script if there were errors determining the author
+    check_errors
+fi
+
+
+# Build arguments for call to git-log
+if ! GIT_LOG_AFTER=$(command date -d "$START_DATE") > /dev/null 2>&1; then
+    log error "invalid date for START_DATE: '$START_DATE'"
+else
+    log debug "GIT_LOG_AFTER set to '$GIT_LOG_AFTER'"
+fi
+
+if [ -n "$END_DATE" ]; then
+    if ! GIT_LOG_BEFORE=$(command date -d "$END_DATE") > /dev/null 2>&1; then
+        log error "invalid date for END_DATE: '$END_DATE'"
+    else
+        log debug "GIT_LOG_BEFORE set to '$GIT_LOG_BEFORE'"
+    fi
+fi
+
+
+# Exit the script if there were errors with the arguments
+check_errors
+
+
+# Set the date options for the call to git-log
+GIT_LOG_DATE_OPTS="--after=$GIT_LOG_AFTER"
+if [ -n "$GIT_LOG_BEFORE" ]; then
+    GIT_LOG_DATE_OPTS="$GIT_LOG_DATE_OPTS --before '$GIT_LOG_BEFORE'"
+fi
+
+
+log debug "
+    git log
+        --all
+        --no-merges
+        --author=\"$GIT_LOG_AUTHOR\"
+        --after=\"$GIT_LOG_AFTER\"
+        --before=\"$GIT_LOG_BEFORE\"
+        $GIT_LOG_ONELINE"
+
+[ ! "$DEBUG_MODE" -eq 1 ] && \
+    git log \
+        --all \
+        --no-merges \
+        --author="$GIT_LOG_AUTHOR" \
+        --after="$GIT_LOG_AFTER" \
+        --before="$GIT_LOG_BEFORE" \
+        $GIT_LOG_ONELINE
