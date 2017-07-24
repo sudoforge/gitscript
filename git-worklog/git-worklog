@@ -174,7 +174,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         *) 
             if [ -n "$ARGUMENTS" ]; then
-                ARGUMENTS="${ARGUMENTS} ${1}"
+                ARGUMENTS="${ARGUMENTS}?${1}"
             else
                 ARGUMENTS="${1}"
             fi
@@ -195,6 +195,9 @@ log debug "ARGUMENTS: $ARGUMENTS"
 ARGS_COUNT=0
 START_DATE=""
 END_DATE=""
+
+ORIGINAL_IFS="$IFS"
+IFS="?"
 for date in $ARGUMENTS; do
     ARGS_COUNT=$(($ARGS_COUNT+1))
     if [ "$ARGS_COUNT" -gt 2 ]; then
@@ -213,6 +216,7 @@ for date in $ARGUMENTS; do
         continue
     fi
 done
+IFS="$ORIGINAL_IFS"
 
 
 # Exit the script if there were errors parsing the options
